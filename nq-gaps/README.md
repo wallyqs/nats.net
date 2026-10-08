@@ -70,7 +70,7 @@ What remains splits into four groups:
 
 ### Messaging
 
-- **No-responders is a divergence.** NQ always throws `NatsNoRespondersException`, as nats.go does; nats.net delivers a 503 message unless `ThrowIfNoResponders` is set.
+- **No-responders differs only outside request/reply.** On `RequestAsync`, both throw `NatsNoRespondersException` by default: NQ as nats.go does, and nats.net since 3.x unless `RequestReplyMode = Direct` is set explicitly (`NatsConnection.RequestReply.cs:242-247`). On a plain subscription, NQ's `NextMsgAsync`/`ReadAllAsync` throw on a 503, as nats.go's `NextMsg` does. nats.net delivers it as a message with `HasNoResponders` unless `ThrowIfNoResponders` is set, and NQ has no such per-call toggle.
 - **`NatsSubOpts`:** `Timeout`, `IdleTimeout`, `StartUpTimeout` [new #1134], `MaxMsgs` inline (NQ: `AutoUnsubscribeAsync`), `NatsSubEndReason`.
 - **`RequestReplyMode`** Direct versus SharedInbox [new #1182].
 - **`NatsPubOpts`** and `CreateRequestSubAsync`, plus the low-level `AddSubAsync` and custom `NatsSubBase` extension points.
