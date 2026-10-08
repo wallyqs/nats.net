@@ -70,7 +70,7 @@ What remains splits into four groups:
 
 ### Messaging
 
-- **No-responders differs only outside request/reply.** On `RequestAsync`, both throw `NatsNoRespondersException` by default: NQ as nats.go does, and nats.net since 3.x unless `RequestReplyMode = Direct` is set explicitly (`NatsConnection.RequestReply.cs:242-247`). On a plain subscription, NQ's `NextMsgAsync`/`ReadAllAsync` throw on a 503, as nats.go's `NextMsg` does. nats.net delivers it as a message with `HasNoResponders` unless `ThrowIfNoResponders` is set, and NQ has no such per-call toggle.
+- **No-responders differs only outside request/reply.** On `RequestAsync`, both throw `NatsNoRespondersException` by default: NQ as nats.go does, and nats.net since 3.x unless `RequestReplyMode = Direct` is set explicitly (`NatsConnection.RequestReply.cs:242-247`). On a plain subscription, NQ's `NextMsgAsync`/`ReadAllAsync` throw on a 503, as nats.go's `NextMsg` does. nats.net delivers it as a message with `HasNoResponders` unless `ThrowIfNoResponders` is set, and NQ has no such per-call toggle. NQ now offers `NatsSubscription.TryNextMsgAsync` and `TryRequestAsync` instead: they return the 503 or the timeout as a `NatsResult` error without throwing (see below).
 - **`NatsSubOpts`:** `Timeout`, `IdleTimeout`, `StartUpTimeout` [new #1134], `MaxMsgs` inline (NQ: `AutoUnsubscribeAsync`), `NatsSubEndReason`.
 - **`RequestReplyMode`** Direct versus SharedInbox [new #1182].
 - **`NatsPubOpts`** and `CreateRequestSubAsync`, plus the low-level `AddSubAsync` and custom `NatsSubBase` extension points.
@@ -89,7 +89,7 @@ What remains splits into four groups:
   - Streams lack `NatsJSStream.DeleteAsync`/`UpdateAsync`.
   - Purge returns no purged count.
 - **Ergonomics.**
-  - `TryPublishAsync`, `EnsureSuccess` and `NatsJSDuplicateMessageException`.
+  - `EnsureSuccess` and `NatsJSDuplicateMessageException`. `TryPublishAsync` is now implemented in NQ (see below).
   - `MaxConsecutive503Errors`, context-wide `DoubleAck` (NQ double-acks only +ACK, as nats.go does), and `DefaultConsumeOpts`/`DefaultNextOpts`.
   - Consume as an `IAsyncEnumerable` (NQ uses a callback plus a `MessagesAsync` iterator), `DrainOnCancel` [new #1177], non-error consume notifications, and an opt-in for list cancellation [new #1214].
 - **Raw `JSRequestResponseAsync`** and the admin models behind it: snapshot [new #1088], restore, stepdown, peer-remove.
@@ -99,7 +99,7 @@ What remains splits into four groups:
 
 - **KV:**
   - `PurgeDeletes` `RetainRecentlyDeletedKeyHistory` [new #1252];
-  - `Try*`/`NatsResult` variants;
+  - the remaining `Try*` variants (`TryPut`, `TryCreate`, `TryUpdate`, `TryDelete`, `TryPurge`); NQ now has `TryGetAsync` and `TryGetRevisionAsync` (see below);
   - watch `IdleHeartbeat` and `OnNoData`;
   - the `UseDirectGetApiWithKeysInSubject` toggle;
   - a public `IsValidKey`;
@@ -116,6 +116,17 @@ What remains splits into four groups:
   - the `AddServiceAsync(name, version, queueGroup)` overload;
   - endpoints named by subject only;
   - `IAsyncDisposable`.
+
+### Follow-up: Try methods implemented in NQ
+
+wallyqs/nq.dev branch `claude/fervent-dijkstra-kjzfh1` adds nats.net's `NatsResult` pattern to the C# client:
+
+- **Core:** `TryRequestAsync` (both overloads) and `NatsSubscription.TryNextMsgAsync`.
+- **JetStream:** `js.TryPublishAsync`/`TryPublishMsgAsync`, and `NatsJSStream.TryGetMsgAsync`/`TryGetLastMsgForSubjectAsync`.
+- **KV:** `TryGetAsync`/`TryGetRevisionAsync`.
+- **Object Store:** `TryGetInfoAsync`/`TryGetAsync`.
+
+Each returns the value, or the exception the throwing method would throw. No responders, timeouts, API errors and not-found come back without any exception being thrown. `TestDotNetTryResultsAgainstOracle` measures this against nats.go, counting first-chance exceptions.
 
 ## 3. .NET idiom layer (entirely absent in NQ)
 
